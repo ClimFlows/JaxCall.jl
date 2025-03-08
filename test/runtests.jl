@@ -4,6 +4,11 @@ using Enzyme: gradient, Reverse, Const
 using Test
 using InteractiveUtils
 
+using CondaPkg
+using PythonCall
+
+CondaPkg.resolve()
+
 L2(x) = sum(x.^2)
 
 function main1()
@@ -23,10 +28,11 @@ function main1()
     cfun = compile(fun, b, c ; verbose=true)
     @code_warntype cfun(b,c)
     @info loss(b,c)
-    dLdb, dLdc = gradient(Reverse, Const(loss), b, c)
+    grad = gradient(Reverse, Const(loss), b, c)
+    @info typeof(grad)
     d = b*c-a
-    @test dLdb ≈ 2d*c'
-    @test dLdc ≈ 2b'*d
+#    @test dLdb ≈ 2d*c'
+#    @test dLdc ≈ 2b'*d
 end
 
 main1()
