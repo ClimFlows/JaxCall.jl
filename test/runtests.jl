@@ -85,6 +85,12 @@ end
 
 #======================== Helper functions =========================#
 
+rmax(x::Union{Tuple, NamedTuple}) = map(rmax, x)
+rmax(x::AbstractArray) = Float32(maximum(x)) # mapreduce(abs, max, x)
+
+rsize(x::Union{Tuple, NamedTuple}) = map(rsize, x)
+rsize(x::Array) = size(x)
+
 to_rarray(x::Array) = ConcreteRArray(x)
 to_rarray(x::Tuple) = map(to_rarray, x)
 to_array(x::AbstractArray{T,N}) where {T,N} = Array{T,N}(x)
@@ -170,12 +176,6 @@ function load_model(filename)
     return jgrads, time_grad(code, params, x)
 end
 
-rmax(x::Union{Tuple, NamedTuple}) = map(rmax, x)
-rmax(x::AbstractArray) = Float32(maximum(x)) # mapreduce(abs, max, x)
-
-rsize(x::Union{Tuple, NamedTuple}) = map(rsize, x)
-rsize(x::Array) = size(x)
-
-jgrads, (grads, dx) = load_model("test/small.jld")
+jgrads, (grads, dx) = load_model("small.jld")
 @info rmax(grads)
 @info rmax(jgrads)
