@@ -101,6 +101,7 @@ to_array(x::Tuple) = map(to_array, x)
 strip(x) = x
 strip(x::Tuple{T}) where {T} = x[1]
 
+#=
 dotprod(x::A, y::A) where {A<:Array} = sum(x .* y)
 
 function dotprod(x::A, y::A) where {N,A<:Reactant.RArray{<:Number,N}}
@@ -109,6 +110,8 @@ function dotprod(x::A, y::A) where {N,A<:Reactant.RArray{<:Number,N}}
 end
 
 dotprod(x::Tuple, y::Tuple) = mapreduce(dotprod, +, x, y)
+=#
+using JaxCall: dotprod
 
 function addto!(x::Array, xx::ConcreteRArray{T}) where {T}
     @assert size(x) == size(xx)
@@ -120,6 +123,7 @@ function addto!(x::Array, xx::ConcreteRArray{T}) where {T}
     return nothing
 end
 
+#=
 function visit(TT::Type{<:NamedTuple}, var, leaves)
     # notice that we sort field names before visiting each field
     # this is consistent with observed JAX behavior when flattening PyTrees
@@ -140,6 +144,8 @@ visit(::Type, var, leaves) = push!(leaves, var)
 # in this generator body, `x` is actually typeof(x)
 @generated as_flat_tuple(x::NamedTuple) = Expr(:tuple, visit(x, :x, [])...)
 @generated as_flat_tuple(x::Tuple) = Expr(:tuple, visit(x, :x, [])...)
+=#
+using JaxCall: as_flat_tuple
 
 end # module Local
 
