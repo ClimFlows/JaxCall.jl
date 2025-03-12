@@ -17,7 +17,7 @@ using Reactant: Reactant, ConcreteRArray, @compile, @code_hlo
 
 #================ Compiled function and its adjoint ================#
 
-struct CustomFun{Code, Fwd, Bwd}
+struct CustomFun{Code,Fwd,Bwd}
     code::Code
     forward::Fwd
     backward::Bwd
@@ -31,7 +31,7 @@ function compile(code, args...; verbose=false)
     code = string(code)
     fun(args...) = strip(Reactant.Ops.hlo_call(code, args...))
     # args is expected to be a (nested) Tuple / NamedTuple of Arrays
-    cfun = compile(fun, as_flat_tuple(args)... ; verbose)
+    cfun = compile(fun, as_flat_tuple(args)...; verbose)
     return CustomFun(code, cfun.forward, cfun.backward)
 end
 
@@ -78,19 +78,13 @@ function EnzymeRules.reverse(::RevConfig,
                              (douts, ins), # tape
                              args::Duplicated...)
     dins = func.val.backward(to_rarray(douts), ins)
-    @info "reverse" rmax(douts) rmax(dins)
     dvals = as_flat_tuple(map(x -> x.dval, args))
-    @info "reverse before addto!" rmax(dvals)
     foreach(addto!, dvals, dins)
-    @info "reverse after addto!" rmax(dvals)
     make_zero!(douts)
     return map(x -> nothing, args)
 end
 
 #======================== Helper functions =========================#
-
-rmax(x::Union{Tuple, NamedTuple}) = map(rmax, x)
-rmax(x::AbstractArray) = Float32(maximum(x)) # mapreduce(abs, max, x)
 
 to_rarray(x::Array) = ConcreteRArray(x)
 to_rarray(x::Tuple) = map(to_rarray, x)
@@ -110,14 +104,18 @@ end
 dotprod(x::Tuple, y::Tuple) = mapreduce(dotprod, +, x, y)
 
 function addto!(x::Array, yy::ConcreteRArray{T}) where {T}
-    @assert size(x) == size(yy)
-    buf = Reactant.get_buffer(yy)
-    ptr = Base.unsafe_convert(Ptr{T}, Reactant.XLA.unsafe_buffer_pointer(buf))
-    @inbounds for i in eachindex(x)
-        x[i] += unsafe_load(ptr, i)
+    if false
+        # this non-allocating variant seems to lead to memory corruption somehow
+        @assert size(x) == size(yy)
+        buf = Reactant.get_buffer(yy)
+        ptr = Base.unsafe_convert(Ptr{T}, Reactant.XLA.unsafe_buffer_pointer(buf))
+        @inbounds for i in eachindex(x)
+            x[i] += unsafe_load(ptr, i)
+        end
+    else
+        y = Array(yy)
+        @. x += y
     end
-#    y = Array(yy)
-#    @. x += y
     return nothing
 end
 
@@ -143,4 +141,3 @@ visit(::Type, var, leaves) = push!(leaves, var)
 @generated as_flat_tuple(x::Tuple) = Expr(:tuple, visit(x, :x, [])...)
 
 end # module JaxCall
-
