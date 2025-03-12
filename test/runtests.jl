@@ -19,12 +19,12 @@ using Reactant: Reactant, ConcreteRArray, @compile, @code_hlo
 
 struct CompiledFun{Fun,FunC,FunD}
     fun::Fun # original function
-    compiled::FunC # original function, compiled
-    compiled_diff::FunD # adjoint, compiled
+    forward::FunC # original function, compiled
+    backward::FunD # adjoint, compiled
 end
 function (cfun::CompiledFun)(args...)
     args = as_flat_tuple(args)
-    return to_array(cfun.compiled(to_rarray(args)...))
+    return to_array(cfun.forward(to_rarray(args)...))
 end
 
 function compile(code, args... ; verbose=false)
@@ -32,7 +32,7 @@ function compile(code, args... ; verbose=false)
     fun(args...) = strip(Reactant.Ops.hlo_call(code, args...))
     # args is expected to be a (nested) Tuple / NamedTuple of Arrays
     cfun = compile(fun, as_flat_tuple(args)... ; verbose)
-    return CompiledFun(code, cfun.compiled, cfun.compiled_diff)
+    return CompiledFun(code, cfun.forward, cfun.backward)
 end
 
 function compile(fun::Function, inputs...; verbose=false)
@@ -45,13 +45,13 @@ function compile(fun::Function, inputs...; verbose=false)
 
     inputs = to_rarray(inputs)
     verbose && @info @code_hlo fun(inputs...)
-    compiled = @compile fun(inputs...)
+    forward = @compile fun(inputs...)
 
-    outputs = compiled(inputs...)
+    outputs = forward(inputs...)
     verbose && @info @code_hlo dfun!(outputs, inputs)
-    compiled_diff = @compile dfun!(outputs, inputs)
-    compiled_diff(make_zero(outputs), inputs)
-    return CompiledFun(fun, compiled, compiled_diff)
+    backward = @compile dfun!(outputs, inputs)
+    backward(make_zero(outputs), inputs)
+    return CompiledFun(fun, forward, backward)
 end
 
 #===================== Custom Enzyme pullback ======================#
@@ -63,7 +63,7 @@ function EnzymeRules.augmented_primal(config::RevConfig,
     args = map(x -> x.val, inputs)
     args = as_flat_tuple(args)
     args = to_rarray(args) # this creates a copy
-    primal = to_array(func.val.compiled(args...))
+    primal = to_array(func.val.forward(args...))
     shadow = needs_shadow(config) ? make_zero(primal) : nothing
     primal = needs_primal(config) ? primal : nothing
     tape = shadow, args
@@ -75,7 +75,7 @@ function EnzymeRules.reverse(::RevConfig,
                              outs::Type{<:Annotation}, # return value
                              (douts, ins), # tape
                              args::Duplicated...)
-    dins = func.val.compiled_diff(to_rarray(douts), ins)
+    dins = func.val.backward(to_rarray(douts), ins)
     @info "reverse" rmax(douts) rmax(dins)
     dvals = as_flat_tuple(map(x -> x.dval, args))
     @info "reverse before addto!" rmax(dvals)
@@ -86,13 +86,10 @@ function EnzymeRules.reverse(::RevConfig,
 end
 
 #======================== Helper functions =========================#
-
 rmax(x::Union{Tuple, NamedTuple}) = map(rmax, x)
 rmax(x::AbstractArray) = Float32(maximum(x)) # mapreduce(abs, max, x)
 
-rsize(x::Union{Tuple, NamedTuple}) = map(rsize, x)
-rsize(x::Array) = size(x)
-
+#=
 to_rarray(x::Array) = ConcreteRArray(x)
 to_rarray(x::Tuple) = map(to_rarray, x)
 to_array(x::AbstractArray{T,N}) where {T,N} = Array{T,N}(x)
@@ -101,7 +98,6 @@ to_array(x::Tuple) = map(to_array, x)
 strip(x) = x
 strip(x::Tuple{T}) where {T} = x[1]
 
-#=
 dotprod(x::A, y::A) where {A<:Array} = sum(x .* y)
 
 function dotprod(x::A, y::A) where {N,A<:Reactant.RArray{<:Number,N}}
@@ -111,7 +107,7 @@ end
 
 dotprod(x::Tuple, y::Tuple) = mapreduce(dotprod, +, x, y)
 =#
-using JaxCall: dotprod
+using JaxCall: to_rarray, to_array, strip, dotprod
 
 function addto!(x::Array, xx::ConcreteRArray{T}) where {T}
     @assert size(x) == size(xx)
@@ -151,6 +147,7 @@ end # module Local
 
 using Serialization
 using Enzyme
+using JaxCall
 
 L2(x) = sum(x.^2)
 rmax(x::Union{Tuple, NamedTuple}) = map(rmax, x)
@@ -164,7 +161,8 @@ function make_grad(model, params, x, pred)
 end
 
 function time_grad(fun, params, x)
-    model = Local.compile(fun, params, x ; verbose=true)
+#    model = Local.compile(fun, params, x ; verbose=true)
+    model = JaxCall.compile(fun, params, x ; verbose=true)
     pred = model(params, x)
     grad = make_grad(model, params, x, pred)
     @time grad(params, x)
@@ -185,5 +183,5 @@ function load_model(filename)
     return jgrads, time_grad(code, params, x)
 end
 
-jax_grads, (grads, dx) = load_model("small.jld")
-@info "check" rmax(grads) rmax(jax_grads)
+jax_grads, (enz_grads, dx) = load_model("small.jld")
+@info "check" rmax(enz_grads) rmax(jax_grads)

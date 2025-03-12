@@ -78,13 +78,19 @@ function EnzymeRules.reverse(::RevConfig,
                              (douts, ins), # tape
                              args::Duplicated...)
     dins = func.val.backward(to_rarray(douts), ins)
+    @info "reverse" rmax(douts) rmax(dins)
     dvals = as_flat_tuple(map(x -> x.dval, args))
+    @info "reverse before addto!" rmax(dvals)
     foreach(addto!, dvals, dins)
+    @info "reverse after addto!" rmax(dvals)
     make_zero!(douts)
     return map(x -> nothing, args)
 end
 
 #======================== Helper functions =========================#
+
+rmax(x::Union{Tuple, NamedTuple}) = map(rmax, x)
+rmax(x::AbstractArray) = Float32(maximum(x)) # mapreduce(abs, max, x)
 
 to_rarray(x::Array) = ConcreteRArray(x)
 to_rarray(x::Tuple) = map(to_rarray, x)
