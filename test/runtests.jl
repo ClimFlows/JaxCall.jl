@@ -1,8 +1,10 @@
+module Local
+
 using Enzyme
 using Enzyme.EnzymeRules
 using Reactant: Reactant, ConcreteRArray, @compile, @code_hlo
 
-# We want to call a JAX functions with their "natural" arguments
+# We want to call JAX functions with their "natural" arguments
 # but HLO expects that we flatten nested structures first.
 # For this flattening to be type-stable on the Julia side,
 # the "natural" arguments must provide their structure in the type domain.
@@ -139,9 +141,14 @@ visit(::Type, var, leaves) = push!(leaves, var)
 @generated as_flat_tuple(x::NamedTuple) = Expr(:tuple, visit(x, :x, [])...)
 @generated as_flat_tuple(x::Tuple) = Expr(:tuple, visit(x, :x, [])...)
 
-# %%
+end # module Local
+
+using Serialization
+using Enzyme
 
 L2(x) = sum(x.^2)
+rmax(x::Union{Tuple, NamedTuple}) = map(rmax, x)
+rmax(x::AbstractArray) = maximum(x)
 
 function make_grad(model, params, x, pred)
 #    loss(params, x) = L2(model(params, x)-pred)
@@ -151,7 +158,7 @@ function make_grad(model, params, x, pred)
 end
 
 function time_grad(fun, params, x)
-    model = compile(fun, params, x ; verbose=true)
+    model = Local.compile(fun, params, x ; verbose=true)
     pred = model(params, x)
     grad = make_grad(model, params, x, pred)
     @time grad(params, x)
@@ -165,17 +172,12 @@ function test()
   time_grad(fun, params, x)
 end
 
-test()
-
-# %%
-
-using Serialization
+# test()
 
 function load_model(filename)
     (code, params, jgrads, x) = Serialization.deserialize(string(filename))
     return jgrads, time_grad(code, params, x)
 end
 
-jgrads, (grads, dx) = load_model("small.jld")
-@info rmax(grads)
-@info rmax(jgrads)
+jax_grads, (grads, dx) = load_model("small.jld")
+@info "check" rmax(grads) rmax(jax_grads)
