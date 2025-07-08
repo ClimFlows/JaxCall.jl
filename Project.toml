@@ -1,13 +1,13 @@
 name = "JaxCall"
 uuid = "0684c073-ddb9-4fc7-87c8-9d6eef9b287e"
 authors = ["Thomas Dubos <thomas.dubos@polytechnique.edu>"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
 
 [compat]
-Enzyme = "0.13.30"
-Reactant = "0.2.35"
+Enzyme = "0.13.55"
+Reactant = "<0.2.101"
 julia = "~1.10"

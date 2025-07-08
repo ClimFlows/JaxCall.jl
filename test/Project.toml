@@ -8,4 +8,11 @@ Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-Reactant = "=0.2.35"
+# Reactant = "=0.2.35" works
+# Reactant = "=0.2.89" works
+# Reactant = "=0.2.95" works
+# Reactant = "=0.2.99" works
+# Reactant = "=0.2.101" fails
+# Reactant = "=0.2.102" fails
+# Reactant = "=0.2.116" fails
+# Reactant = "=0.2.143" fails

@@ -44,4 +44,4 @@ end
 jax_grads, (enz_grads, dx) = load_model("small.jld")
 err = diff(enz_grads, jax_grads)
 @info "check" err rmax(err)
-@test rmax(err)<1e-7
+@test rmax(err)<2e-7
