@@ -1,7 +1,22 @@
 using Serialization
 using Enzyme
-using JaxCall
+using JaxCall: JaxCall, to_rarray
+using Reactant: @code_hlo
 using Test
+
+f(q) = q*q
+q = randn(1000, 1000) # square, to avoid shape issues
+code = string(@code_hlo f(to_rarray(q)))
+f_hlo = JaxCall.compile(code, q)
+
+function timeit(N, fun, q) 
+    fun(q)
+    @time for _ in 1:N ; fun(q) ; end
+end
+@info "Time for 10 Julia 1000x1000 matmul"
+timeit(10, f, q)
+@info "Timing for 10 Reactant 1000x1000 matmul"
+timeit(10, f_hlo, q)
 
 L2(x) = sum(x.^2)
 L1(x) = mapreduce(abs, max, x)
@@ -45,3 +60,5 @@ jax_grads, (enz_grads, dx) = load_model("small.jld")
 err = diff(enz_grads, jax_grads)
 @info "check" err rmax(err)
 @test rmax(err)<2e-7
+
+
