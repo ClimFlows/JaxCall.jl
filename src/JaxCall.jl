@@ -22,9 +22,12 @@ struct CustomFun{Code,Fwd,Bwd}
     forward::Fwd
     backward::Bwd
 end
-function (cfun::CustomFun)(args...)
+
+@inline function (cfun::CustomFun)(args::Vararg{Any, N}) where N
     args = as_flat_tuple(args)
-    return to_array(cfun.forward(to_rarray(args)...))
+    rargs = to_rarray(args)
+    result = cfun.forward(rargs...)
+    return to_array(result)
 end
 
 function compile(code, args...; verbose=false)
@@ -35,7 +38,7 @@ function compile(code, args...; verbose=false)
     return CustomFun(code, cfun.forward, cfun.backward)
 end
 
-function compile(fun::Function, inputs...; verbose=false)
+function compile(fun::Function, inputs::Vararg{Any,N}; verbose=false) where N
     # `fun` is a pure function which takes inputs and returns outputs
     dfun(douts, ins) = dotprod(douts, fun(ins...))
     function dfun!(douts, ins)
@@ -86,22 +89,24 @@ end
 
 #======================== Helper functions =========================#
 
-to_rarray(x::Array) = ConcreteRArray(x)
-to_rarray(x::Tuple) = map(to_rarray, x)
-to_array(x::AbstractArray{T,N}) where {T,N} = Array{T,N}(x)
-to_array(x::Tuple) = map(to_array, x)
+@inline to_rarray(x) = Reactant.to_rarray(x)
+@inline to_rarray(x::Tuple) = map(to_rarray, x)
 
-strip(x) = x
-strip(x::Tuple{T}) where {T} = x[1]
+@inline to_array(x::AbstractArray) = convert(Array, x)
+@inline to_array(x::Tuple) = map(to_array, x)
 
-dotprod(x::A, y::A) where {A<:Array} = sum(x .* y)
+@inline strip(x) = x
+@inline strip(x::Tuple{T}) where {T} = x[1]
+
+@inline dotprod(x::A, y::A) where {A<:Array} = sum(x .* y)
+@inline dotprod(x::F, y::F) where {F<:Number} = x*y
+@inline dotprod(x::Tuple, y::Tuple) = mapreduce(dotprod, +, x, y)
 
 function dotprod(x::A, y::A) where {N,A<:Reactant.RArray{<:Number,N}}
     dims = collect(1:N)
     return Reactant.Ops.dot_general(x, y; contracting_dimensions=(dims, dims))
 end
 
-dotprod(x::Tuple, y::Tuple) = mapreduce(dotprod, +, x, y)
 
 function addto!(x::Array, yy::ConcreteRArray{T}) where {T}
     if false
