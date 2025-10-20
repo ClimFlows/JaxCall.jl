@@ -10,4 +10,5 @@ Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
 [compat]
 Enzyme = "0.13.55"
 # Reactant = "<0.2.36"
+Reactant = "<0.2.101"
 julia = "~1.10"
