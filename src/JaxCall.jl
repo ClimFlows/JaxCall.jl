@@ -35,7 +35,7 @@ end
 function EnzymeRules.augmented_primal(config::RevConfig,
                                       func::Annotation{<:CustomFun},
                                       ::Type{<:Annotation},
-                                      inputs::Vararg{<:Duplicated})
+                                      inputs::Vararg{Duplicated})
     args = map(x -> x.val, inputs)
     args = as_flat_tuple(args)
     args = to_rarray(args) # this creates a copy
@@ -47,16 +47,19 @@ function EnzymeRules.augmented_primal(config::RevConfig,
 end
 
 function EnzymeRules.reverse(::RevConfig,
-                             func::Const{<:CustomFun},
+                             func::Duplicated{<:CustomFun},
                              outs::Type{<:Annotation}, # return value
                              (douts, ins), # tape
-                             args::Vararg{<:Duplicated})
+                             args::Vararg{Duplicated})
     dins = func.val.backward(to_rarray(douts), ins)
     dvals = as_flat_tuple(map(x -> x.dval, args))
     foreach(addto!, dvals, dins)
     make_zero!(douts)
     return map(x -> nothing, args)
 end
+
+# a MethodError on EnzymeRules.reverse may produce a stack trace big enough
+# to cause a segfault, so we rather handle such errors ourselves
 
 get_type(::Type{T}) where T = T
 
@@ -65,10 +68,11 @@ function EnzymeRules.reverse(config::RevConfig,
                              outs, # return value
                              (douts, ins), # tape
                              args...)
-    @error "Enzyme.reverse called with unexpected arguments" typeof(config) get_type(outs) typeof(douts) typeof(ins) typeof.(args)
-    @info "check" func isa Const{<:CustomFun}
-    @info "check" outs isa Type{<:Annotation}
-    @info "check" args isa Tuple{Vararg{<:Duplicated}}                             
+    @error "EnzymeRules.reverse called with unexpected arguments"
+    @error "reverse" typeof(config) typeof(func).name get_type(outs) typeof(douts) typeof(ins) typeof.(args)
+    @error "reverse" func isa Const{<:CustomFun}
+    @error "reverse" outs isa Type{<:Annotation}
+    @error "reverse" args isa Tuple{Vararg{Duplicated}}                             
     error()
     return nothing
 end
