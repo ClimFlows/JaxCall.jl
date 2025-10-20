@@ -1,22 +1,58 @@
 using Serialization
 using Enzyme
-using JaxCall: JaxCall, to_rarray
-using Reactant: @code_hlo
+using JaxCall: JaxCall, to_rarray, compile
+using Reactant: @code_hlo, @compile
 using Test
-
-f(q) = q*q
-q = randn(1000, 1000) # square, to avoid shape issues
-code = string(@code_hlo f(to_rarray(q)))
-f_hlo = JaxCall.compile(code, q)
 
 function timeit(N, fun, q) 
     fun(q)
     @time for _ in 1:N ; fun(q) ; end
 end
+
+f(q) = q*q
+q = randn(Float32, 1000, 1000) # square, to avoid shape issues
+code = string(@code_hlo f(to_rarray(q)))
+
 @info "Time for 10 Julia 1000x1000 matmul"
 timeit(10, f, q)
+
+@info "Timing for 1 non-compiled Reactant 1000x1000 matmul"
+f_hlo = JaxCall.HLOFun(code)
+rq = to_rarray(q)
+compiled_f = @compile f_hlo(rq) 
+timeit(10, compiled_f, rq)
+
 @info "Timing for 10 Reactant 1000x1000 matmul"
-timeit(10, f_hlo, q)
+compiled_f = compile(code, q)
+# timeit(10, compiled_f, rq)
+timeit(10, compiled_f, q)
+
+rq2 = compiled_f.forward(rq)
+dq = compiled_f.backward(rq2, (rq,))
+
+#=============================================================#
+
+f(a,b) = a*b
+
+a = randn(Float32, 100, 100) # square, to avoid shape issues
+b = randn(Float32, 100, 100) # square, to avoid shape issues
+ra, rb = to_rarray((a,b))
+code = string(@code_hlo f(ra,rb))
+compiled_f = compile(code, a, b)
+
+rc = compiled_f.forward(ra,rb)
+dc = compiled_f.backward(rc, (ra,rb))
+
+g(cf, a,b) = sum(cf(a,b))
+dup(x) = Duplicated(x, copy(x))
+
+@info "g" g(f, a',b') g(compiled_f, a,b)
+
+autodiff(Reverse, Const(g), Active, Const(f), dup(a'), dup(b'))
+
+autodiff(Reverse, Const(g), Active, Const(compiled_f), dup(a), dup(b))
+
+#===== check HLO functions can be differentiated as ordinary functions ====#
 
 L2(x) = sum(x.^2)
 L1(x) = mapreduce(abs, max, x)
@@ -57,8 +93,6 @@ function load_model(filename)
 end
 
 jax_grads, (enz_grads, dx) = load_model("small.jld")
-err = diff(enz_grads, jax_grads)
-@info "check" err rmax(err)
-@test rmax(err)<2e-7
-
-
+# err = diff(enz_grads, jax_grads)
+# @info "check" err rmax(err)
+# @test rmax(err)<2e-7

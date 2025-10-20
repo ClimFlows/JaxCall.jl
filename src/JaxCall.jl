@@ -3,6 +3,7 @@ module JaxCall
 using Enzyme
 using Enzyme.EnzymeRules
 using Reactant: Reactant, ConcreteRArray, @compile, @code_hlo
+using Reactant.Compiler: Thunk
 
 # We want to call a JAX functions with their "natural" arguments
 # but HLO expects that we flatten nested structures first.
@@ -15,48 +16,18 @@ using Reactant: Reactant, ConcreteRArray, @compile, @code_hlo
 # (iv)    converts Arrays to ConcreteRArrays before passing them to hlo_call,
 # (v)     and converts the returned result to Arrays.
 
-#================ Compiled function and its adjoint ================#
-
-struct CustomFun{Code,Fwd,Bwd}
-    code::Code
-    forward::Fwd
-    backward::Bwd
+# compiled, callable and differentiable HLO function => for user consumption
+struct CustomFun{Fwd<:Thunk, Bwd<:Thunk}
+#    code::String
+    forward::Fwd   # @compiled, RArray inputs/outputs
+    backward::Bwd  # @compiled, RArray inputs/outputs
 end
 
-@inline function (cfun::CustomFun)(args::Vararg{Any, N}) where N
-    args = as_flat_tuple(args)
-    rargs = to_rarray(args)
-    result = cfun.forward(rargs...)
-    return to_array(result)
-end
-
-function compile(code, args...; verbose=false)
-    code = string(code)
-    fun(args...) = strip(Reactant.Ops.hlo_call(code, args...))
-    # args is expected to be a (nested) Tuple / NamedTuple of Arrays
-    cfun = compile(fun, as_flat_tuple(args)...; verbose)
-    return CustomFun(code, cfun.forward, cfun.backward)
-end
-
-function compile(fun::Function, inputs::Vararg{Any,N}; verbose=false) where N
-    # `fun` is a pure function which takes inputs and returns outputs
-    dfun(douts, ins) = dotprod(douts, fun(ins...))
-    function dfun!(douts, ins)
-        _, dins = Enzyme.gradient(Reverse, dfun, Const(douts), ins)
-        return dins
-    end
-
-    inputs = to_rarray(inputs)
-    code = @code_hlo fun(inputs...)
-    verbose && @info code
-    forward = @compile fun(inputs...)
-
-    outputs = forward(inputs...)
-    code = @code_hlo dfun!(outputs, inputs)
-    verbose && @info code
-    backward = @compile dfun!(outputs, inputs)
-    backward(make_zero(outputs), inputs)
-    return CustomFun(fun, forward, backward)
+@inline function (fun::CustomFun)(args::Vararg{Any, N}) where N
+    flat_args = as_flat_tuple(args)
+    rargs = to_rarray(flat_args)
+    results = strip(fun.forward(rargs...))
+    return to_array(results)
 end
 
 #===================== Custom Enzyme pullback ======================#
@@ -82,9 +53,53 @@ function EnzymeRules.reverse(::RevConfig,
                              args::Duplicated...)
     dins = func.val.backward(to_rarray(douts), ins)
     dvals = as_flat_tuple(map(x -> x.dval, args))
+#    @info "reverse!" typeof(ins) typeof(dins) typeof(dvals) outs typeof(douts)
     foreach(addto!, dvals, dins)
     make_zero!(douts)
     return map(x -> nothing, args)
+end
+
+#================= @compile HLO code and its adjoint ================#
+
+# callable objects for internal use only, not compiled and/or not differentiable
+
+# RArray inputs/outputs, to be compiled
+struct HLOFun
+    code::String
+end
+(fun::HLOFun)(args...) = strip(Reactant.Ops.hlo_call(fun.code, args...))
+
+# function whose gradient provides the adjoint
+# RArray inputs/outputs, to be differentiated
+struct DFun
+    code::String
+end
+function (dfun::DFun)(douts, ins...)
+    fun = HLOFun(dfun.code)
+    return dotprod(douts, fun(ins...))
+end
+
+# applies the adjoint of `code` to `douts`
+# RArray inputs/outputs, to be compiled
+struct DFun!
+    code::String
+end
+function (dfun!::DFun!)(douts, ins)
+    dfun = DFun(dfun!.code)
+    _, dins... = Enzyme.gradient(Reverse, Const(dfun), Const(douts), ins...)
+    return dins
+end
+
+function compile(code::String, args...; verbose=false)
+    flat_args = as_flat_tuple(args)
+    rargs = to_rarray(flat_args)
+    fun = HLOFun(code) # not compiled
+    cfun = @compile fun(rargs...)
+
+    outs = cfun(rargs...)
+    dfun! = DFun!(code) # not compiled
+    dfun = @compile dfun!(outs, rargs)
+    return CustomFun(cfun, dfun)
 end
 
 #======================== Helper functions =========================#
