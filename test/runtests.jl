@@ -32,6 +32,8 @@ dq = compiled_f.backward(rq2, (rq,))
 
 #=============================================================#
 
+transp(x) = Array(x')
+
 f(a,b) = a*b
 
 a = randn(Float32, 100, 100) # square, to avoid shape issues
@@ -48,7 +50,7 @@ dup(x) = Duplicated(x, copy(x))
 
 @info "g" g(f, a',b') g(compiled_f, a,b)
 
-autodiff(Reverse, Const(g), Active, Const(f), dup(a'), dup(b'))
+autodiff(Reverse, Const(g), Active, Const(f), dup(transp(a)), dup(transp(b)))
 
 autodiff(Reverse, Const(g), Active, Const(compiled_f), dup(a), dup(b))
 
@@ -93,6 +95,6 @@ function load_model(filename)
 end
 
 jax_grads, (enz_grads, dx) = load_model("small.jld")
-# err = diff(enz_grads, jax_grads)
-# @info "check" err rmax(err)
-# @test rmax(err)<2e-7
+err = diff(enz_grads, jax_grads)
+@info "check" err rmax(err)
+@test rmax(err)<2e-7
