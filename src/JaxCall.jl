@@ -35,7 +35,7 @@ end
 function EnzymeRules.augmented_primal(config::RevConfig,
                                       func::Annotation{<:CustomFun},
                                       ::Type{<:Annotation},
-                                      inputs::Duplicated...)
+                                      inputs::Vararg{<:Duplicated})
     args = map(x -> x.val, inputs)
     args = as_flat_tuple(args)
     args = to_rarray(args) # this creates a copy
@@ -50,13 +50,27 @@ function EnzymeRules.reverse(::RevConfig,
                              func::Const{<:CustomFun},
                              outs::Type{<:Annotation}, # return value
                              (douts, ins), # tape
-                             args::Duplicated...)
+                             args::Vararg{<:Duplicated})
     dins = func.val.backward(to_rarray(douts), ins)
     dvals = as_flat_tuple(map(x -> x.dval, args))
-#    @info "reverse!" typeof(ins) typeof(dins) typeof(dvals) outs typeof(douts)
     foreach(addto!, dvals, dins)
     make_zero!(douts)
     return map(x -> nothing, args)
+end
+
+get_type(::Type{T}) where T = T
+
+function EnzymeRules.reverse(config::RevConfig,
+                             func::Annotation{<:CustomFun},
+                             outs, # return value
+                             (douts, ins), # tape
+                             args...)
+    @error "Enzyme.reverse called with unexpected arguments" typeof(config) get_type(outs) typeof(douts) typeof(ins) typeof.(args)
+    @info "check" func isa Const{<:CustomFun}
+    @info "check" outs isa Type{<:Annotation}
+    @info "check" args isa Tuple{Vararg{<:Duplicated}}                             
+    error()
+    return nothing
 end
 
 #================= @compile HLO code and its adjoint ================#

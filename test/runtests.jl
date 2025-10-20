@@ -65,6 +65,9 @@ rmax(x::NamedTuple) = mapreduce(rmax, max, x)
 diff(x::Array, y::Array) = L1(x-y)/(L1(x)+L1(y))
 diff(x::N, y::N) where {N<:NamedTuple} = map(diff, x, y)
 
+shape(x::Array) = size(x)
+shape(x::NamedTuple) = map(shape, x)
+
 function make_grad(model, params, x, pred)
 #    loss(params, x) = L2(model(params, x)-pred)
     loss(params, x) = L2(model(params, x))
@@ -91,10 +94,10 @@ end
 
 function load_model(filename)
     (code, params, jgrads, x) = Serialization.deserialize(string(filename))
-    return jgrads, time_grad(code, params, x)
+    return params, jgrads, time_grad(code, params, x)
 end
 
-jax_grads, (enz_grads, dx) = load_model("small.jld")
+params, jax_grads, (enz_grads, dx) = load_model("small.jld")
 err = diff(enz_grads, jax_grads)
-@info "check" err rmax(err)
+@info "check" shape(params) err rmax(err)
 @test rmax(err)<2e-7
