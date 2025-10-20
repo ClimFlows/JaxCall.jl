@@ -47,7 +47,7 @@ function EnzymeRules.augmented_primal(config::RevConfig,
 end
 
 function EnzymeRules.reverse(::RevConfig,
-                             func::Duplicated{<:CustomFun},
+                             func::Annotation{<:CustomFun},
                              outs::Type{<:Annotation}, # return value
                              (douts, ins), # tape
                              args::Vararg{Duplicated})
