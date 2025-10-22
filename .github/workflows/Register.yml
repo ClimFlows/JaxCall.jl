@@ -4,6 +4,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   register:
     uses: ClimFlows/.github/.github/workflows/register.yml@main
