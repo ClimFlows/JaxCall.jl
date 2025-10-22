@@ -1,0 +1,9 @@
+name: Auto-Tag on Version Change
+on:
+  push:
+    branches: [main]
+
+jobs:
+  tag:
+    uses: yourorg/.github/.github/workflows/auto-tag.yml@main
+    secrets: inherit

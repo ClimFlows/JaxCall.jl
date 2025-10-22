@@ -1,0 +1,10 @@
+name: Register Package
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  register:
+    uses: ClimFlows/.github/.github/workflows/register.yml@main
+    secrets: inherit
