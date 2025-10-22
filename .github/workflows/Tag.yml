@@ -5,5 +5,5 @@ on:
 
 jobs:
   tag:
-    uses: yourorg/.github/.github/workflows/auto-tag.yml@main
+    uses: ClimFlows/.github/.github/workflows/auto-tag.yml@main
     secrets: inherit
