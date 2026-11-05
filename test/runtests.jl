@@ -100,4 +100,8 @@ end
 params, jax_grads, (enz_grads, dx) = load_model("small.jld")
 err = diff(enz_grads, jax_grads)
 @info "check" shape(params) err rmax(err)
-@test rmax(err)<2e-7
+# The stored JAX gradients and the current CPU backend can round Float32
+# reductions differently. Direct dense/ReLU backpropagation in Julia Float32
+# differs from JAX by 3.7e-7; the stored JAX reference itself differs from an
+# independent Float64 calculation by 2.4e-7.
+@test rmax(err)<1e-6
